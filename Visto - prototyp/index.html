@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Visto — Odkryj. Sprawdź. Zjedz.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{
+  --bg:#060a12;--panel:#0d1520;--panel2:#121d2e;
+  --border:rgba(255,255,255,0.07);--text:#edf2ff;
+  --muted:#677a96;--muted2:#354558;
+  --accent:#ff5a26;--accent2:#00cfff;
+  --green:#1dd99a;--yellow:#f5b800;--red:#ff3957;
+  --r:20px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{width:100%;height:100%;background:#030608;font-family:'DM Sans',sans-serif;color:var(--text);overflow:hidden;-webkit-font-smoothing:antialiased;}
+body{display:flex;justify-content:center;align-items:center;}
+
+.phone{width:100%;max-width:393px;height:100vh;background:var(--bg);position:relative;overflow:hidden;display:flex;flex-direction:column;border-left:1px solid rgba(255,255,255,0.05);border-right:1px solid rgba(255,255,255,0.05);}
+.phone::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 70% 30% at 50% 0%,rgba(255,90,38,0.08),transparent 60%),radial-gradient(ellipse 50% 40% at 100% 100%,rgba(0,207,255,0.05),transparent 50%);pointer-events:none;z-index:0;}
+
+.statusbar{padding:14px 22px 0;display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:600;color:var(--muted);flex-shrink:0;position:relative;z-index:1;}
+.content-area{flex:1;overflow:hidden;position:relative;z-index:1;}
+.view{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;opacity:0;pointer-events:none;transform:translateY(10px);transition:opacity .22s ease,transform .22s ease;scrollbar-width:none;}
+.view::-webkit-scrollbar{display:none;}
+.view.active{opacity:1;pointer-events:all;transform:translateY(0);}
+
+.bottom-nav{height:78px;padding:8px 12px 18px;background:rgba(6,10,18,0.96);border-top:1px solid var(--border);backdrop-filter:blur(24px);display:grid;grid-template-columns:repeat(4,1fr);gap:6px;flex-shrink:0;position:relative;z-index:10;}
+.nav-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border-radius:14px;cursor:pointer;transition:all .2s;padding:5px 2px;border:1px solid transparent;}
+.nav-item.active{background:rgba(255,90,38,0.1);border-color:rgba(255,90,38,0.18);}
+.nav-icon{font-size:18px;line-height:1;}
+.nav-label{font-size:10px;font-weight:600;color:var(--muted);letter-spacing:.01em;}
+.nav-item.active .nav-label{color:var(--accent);}
+
+/* UTILS */
+.px{padding-left:18px;padding-right:18px;}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);}
+.sec-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;}
+.sec-title{font-family:'Syne',sans-serif;font-size:16px;font-weight:700;letter-spacing:-.02em;}
+.sec-more{font-size:12px;color:var(--accent2);font-weight:500;cursor:pointer;}
+
+/* CROWD DOTS */
+.cdot{width:8px;height:8px;border-radius:50%;position:relative;flex-shrink:0;display:inline-block;}
+.cdot::after{content:'';position:absolute;inset:-4px;border-radius:50%;animation:cpulse 2s infinite;}
+.cdot.red{background:var(--red);}.cdot.red::after{background:rgba(255,57,87,.3);}
+.cdot.yellow{background:var(--yellow);}.cdot.yellow::after{background:rgba(245,184,0,.3);}
+.cdot.green{background:var(--green);}.cdot.green::after{background:rgba(29,217,154,.3);}
+@keyframes cpulse{0%,100%{transform:scale(1);opacity:.7;}50%{transform:scale(2.5);opacity:0;}}
+
+/* === DISCOVER === */
+.topbar-d{padding:14px 18px 10px;display:flex;justify-content:space-between;align-items:center;}
+.logo{font-family:'Syne',sans-serif;font-size:26px;font-weight:800;letter-spacing:-.05em;}
+.logo-dot{color:var(--accent);}
+.loc-chip{display:flex;align-items:center;gap:6px;padding:7px 13px;background:var(--panel);border:1px solid var(--border);border-radius:999px;font-size:12px;font-weight:500;cursor:pointer;}
+.greeting{padding:0 18px 8px;}
+.greeting h2{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;letter-spacing:-.03em;margin-bottom:2px;}
+.greeting p{font-size:13px;color:var(--muted);}
+.search-bar{margin:0 18px 14px;padding:12px 16px;background:var(--panel);border:1px solid var(--border);border-radius:16px;display:flex;align-items:center;gap:9px;font-size:13px;color:var(--muted);cursor:pointer;}
+
+/* AI BANNER */
+.ai-banner{margin:0 18px 16px;padding:16px;background:linear-gradient(135deg,rgba(255,90,38,.12),rgba(0,207,255,.07));border:1px solid rgba(255,90,38,.22);border-radius:var(--r);cursor:pointer;position:relative;overflow:hidden;transition:border-color .2s;}
+.ai-banner::after{content:'';position:absolute;top:-40px;right:-40px;width:140px;height:140px;background:radial-gradient(circle,rgba(255,90,38,.15),transparent 70%);}
+.ai-tag{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--accent);margin-bottom:8px;}
+.ai-pulse{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:cpulse 1.5s infinite;}
+.ai-pulse.blue{background:var(--accent2);}
+.ai-banner h3{font-family:'Syne',sans-serif;font-size:16px;font-weight:700;letter-spacing:-.03em;margin-bottom:5px;}
+.ai-banner p{font-size:12px;color:var(--muted);line-height:1.45;max-width:calc(100% - 30px);}
+.ai-arrow{position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:22px;color:var(--accent);z-index:1;}
+
+/* CATEGORY PILLS */
+.cat-row{display:flex;gap:7px;padding:2px 18px;overflow-x:auto;margin-bottom:16px;scrollbar-width:none;}
+.cat-row::-webkit-scrollbar{display:none;}
+.cat-btn{flex-shrink:0;padding:7px 13px;border-radius:999px;border:1px solid var(--border);background:var(--panel);color:var(--muted);font-size:12px;font-weight:500;cursor:pointer;transition:all .18s;white-space:nowrap;}
+.cat-btn.active{background:rgba(255,90,38,.12);border-color:rgba(255,90,38,.3);color:var(--accent);}
+
+/* HORIZONTAL CARDS */
+.hscroll-wrap{margin-bottom:20px;}
+.hscroll{display:flex;gap:11px;padding:2px 18px 4px;overflow-x:auto;scrollbar-width:none;}
+.hscroll::-webkit-scrollbar{display:none;}
+.rcard-sm{flex-shrink:0;width:186px;background:var(--panel);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;cursor:pointer;transition:transform .2s;}
+.rcard-sm:active{transform:scale(.97);}
+.rcard-thumb{height:105px;position:relative;display:flex;align-items:flex-end;padding:10px;}
+.emoji-bg{position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);font-size:44px;opacity:.18;pointer-events:none;}
+.crowd-chip{padding:5px 9px;border-radius:999px;background:rgba(0,0,0,.55);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.08);font-size:10px;font-weight:700;letter-spacing:.04em;display:flex;align-items:center;gap:5px;z-index:1;}
+.rcard-body{padding:11px 12px 12px;}
+.rcard-name{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;letter-spacing:-.02em;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rcard-sub{font-size:11px;color:var(--muted);margin-bottom:8px;}
+.rcard-chips{display:flex;gap:6px;}
+.chip-sm{padding:3px 7px;border-radius:7px;background:rgba(255,255,255,.04);border:1px solid var(--border);font-size:10px;color:var(--muted);}
+
+/* LIST ITEMS */
+.rlist-item{display:flex;align-items:center;gap:13px;padding:13px;margin-bottom:9px;background:var(--panel);border:1px solid var(--border);border-radius:18px;cursor:pointer;transition:border-color .2s;}
+.rlist-item:active{opacity:.85;}
+.rlist-thumb{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;}
+.rlist-info{flex:1;min-width:0;}
+.rlist-name{font-weight:600;font-size:14px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rlist-sub{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px;}
+.rating-tag{padding:4px 9px;border-radius:999px;background:rgba(245,184,0,.1);border:1px solid rgba(245,184,0,.2);font-size:12px;font-weight:600;color:var(--yellow);flex-shrink:0;}
+
+/* === MAP === */
+.map-wrap{height:100%;display:flex;flex-direction:column;position:relative;}
+.map-topbar{padding:12px 18px 10px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
+#map{flex:1;}
+.map-card-wrap{position:absolute;bottom:0;left:0;right:0;padding:12px 14px;background:linear-gradient(to top,var(--bg) 65%,transparent);transform:translateY(100%);transition:transform .3s ease;z-index:10;}
+.map-card-wrap.visible{transform:translateY(0);}
+.map-mini{display:flex;align-items:center;gap:13px;padding:13px;cursor:pointer;background:var(--panel);border:1px solid var(--border);border-radius:18px;}
+.map-mini-thumb{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;}
+
+/* === PLACE DETAIL === */
+.place-hero{height:195px;position:relative;display:flex;align-items:flex-end;padding:14px;flex-shrink:0;}
+.place-hero-emoji{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:76px;opacity:.14;user-select:none;}
+.back-btn{position:absolute;top:14px;left:14px;width:38px;height:38px;border-radius:12px;background:rgba(0,0,0,.55);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;z-index:2;color:white;}
+.place-hero-card{background:rgba(0,0,0,.6);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:12px 14px;width:100%;z-index:1;}
+.place-hero-name{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;letter-spacing:-.04em;margin-bottom:5px;}
+.place-hero-meta{font-size:12px;color:rgba(255,255,255,.55);display:flex;align-items:center;gap:7px;}
+
+/* LIVE STRIP */
+.live-strip{margin:14px 18px;padding:13px 15px;background:var(--panel);border:1px solid var(--border);border-radius:18px;display:flex;align-items:center;justify-content:space-between;}
+.live-left{display:flex;align-items:center;gap:11px;}
+.live-indicator{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative;}
+.live-ring{position:absolute;inset:0;border-radius:50%;animation:lring 2s infinite;}
+@keyframes lring{0%{transform:scale(.8);opacity:.7;}100%{transform:scale(1.7);opacity:0;}}
+.live-ring.red{background:rgba(255,57,87,.25);}
+.live-ring.yellow{background:rgba(245,184,0,.25);}
+.live-ring.green{background:rgba(29,217,154,.25);}
+.live-core{width:14px;height:14px;border-radius:50%;z-index:1;}
+.live-core.red{background:var(--red);box-shadow:0 0 10px var(--red);}
+.live-core.yellow{background:var(--yellow);box-shadow:0 0 10px var(--yellow);}
+.live-core.green{background:var(--green);box-shadow:0 0 10px var(--green);}
+.live-info strong{display:block;font-size:13px;font-weight:600;margin-bottom:1px;}
+.live-info span{font-size:11px;color:var(--muted);}
+.live-right{text-align:right;}
+.live-right strong{display:block;font-size:17px;font-weight:700;letter-spacing:-.02em;margin-bottom:1px;}
+.live-right span{font-size:10px;color:var(--muted);}
+
+/* PLACE STATS */
+.pstats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:0 18px 14px;}
+.pstat{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:13px 10px;text-align:center;}
+.pstat-emoji{font-size:17px;margin-bottom:5px;}
+.pstat-val{font-family:'Syne',sans-serif;font-size:17px;font-weight:700;letter-spacing:-.03em;margin-bottom:2px;}
+.pstat-lbl{font-size:9px;color:var(--muted);font-weight:600;letter-spacing:.05em;}
+
+/* PEAK CHART */
+.peak-wrap{margin:0 18px 14px;background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:15px;}
+.chart-head{font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--muted);margin-bottom:12px;}
+.bars{display:flex;align-items:flex-end;gap:3px;height:60px;}
+.bcol{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;}
+.bbar{width:100%;border-radius:3px 3px 0 0;min-height:2px;transition:height .7s cubic-bezier(.34,1.3,.64,1);}
+.bbar.low{background:var(--green);opacity:.6;}
+.bbar.mid{background:var(--yellow);opacity:.7;}
+.bbar.high{background:var(--red);opacity:.7;}
+.bbar.now{opacity:1;filter:brightness(1.3);}
+.blbl{font-size:7px;color:var(--muted2);margin-top:3px;}
+.bcol.current .blbl{color:var(--accent2);font-weight:700;}
+
+/* AI ANALYSIS */
+.ai-wrap{margin:0 18px 14px;background:linear-gradient(135deg,rgba(0,207,255,.07),rgba(255,90,38,.04));border:1px solid rgba(0,207,255,.18);border-radius:var(--r);padding:15px;}
+.ai-head{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--accent2);margin-bottom:13px;}
+.ai-aspects{display:grid;gap:8px;margin-bottom:12px;}
+.ai-row{display:flex;align-items:center;gap:9px;}
+.ai-row-label{font-size:12px;font-weight:500;width:110px;flex-shrink:0;}
+.ai-bar-bg{flex:1;height:5px;background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden;}
+.ai-bar-fill{height:100%;border-radius:999px;}
+.ai-pct{font-size:11px;font-weight:600;min-width:30px;text-align:right;}
+.ai-insight{font-size:12px;color:rgba(255,255,255,.5);line-height:1.5;font-style:italic;border-top:1px solid var(--border);padding-top:10px;}
+
+/* REVIEWS */
+.rev-card{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:13px;margin-bottom:9px;}
+.rev-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:9px;}
+.rev-user{display:flex;align-items:center;gap:9px;}
+.rev-av{width:34px;height:34px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:white;}
+.rev-name{font-weight:600;font-size:13px;margin-bottom:2px;}
+.rev-gps{font-size:10px;color:var(--green);font-weight:500;display:flex;align-items:center;gap:3px;}
+.rev-stars{font-size:11px;}
+.rev-text{font-size:13px;color:rgba(255,255,255,.72);line-height:1.5;margin-bottom:9px;}
+.rev-foot{display:flex;justify-content:space-between;align-items:center;}
+.like-btn{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid var(--border);font-size:12px;color:var(--muted);cursor:pointer;transition:all .2s;}
+.like-btn.liked{background:rgba(255,57,87,.1);border-color:rgba(255,57,87,.25);color:var(--red);}
+.hot-badge{font-size:10px;font-weight:700;color:var(--yellow);background:rgba(245,184,0,.1);border:1px solid rgba(245,184,0,.2);padding:3px 8px;border-radius:999px;display:flex;align-items:center;gap:3px;}
+
+/* C&C */
+.cc-card{margin:0 18px 14px;background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:15px;}
+.cc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+.menu-row{display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--border);}
+.menu-row:last-of-type{border-bottom:none;}
+.menu-icon{width:42px;height:42px;border-radius:12px;background:var(--panel2);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+.menu-info{flex:1;}
+.menu-name{font-weight:600;font-size:13px;margin-bottom:2px;}
+.menu-price{font-size:12px;color:var(--muted);}
+.add-btn{width:30px;height:30px;border-radius:9px;flex-shrink:0;background:rgba(255,90,38,.1);border:1px solid rgba(255,90,38,.22);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--accent);cursor:pointer;transition:all .2s;}
+.add-btn:active{transform:scale(.88);}
+.add-btn.added{font-size:14px;background:rgba(29,217,154,.15);border-color:rgba(29,217,154,.3);color:var(--green);}
+.order-btn{width:100%;margin-top:12px;padding:14px;background:var(--accent);border:none;border-radius:16px;color:white;font-family:'Syne',sans-serif;font-size:15px;font-weight:700;letter-spacing:-.02em;cursor:pointer;transition:opacity .2s,transform .15s;display:flex;align-items:center;justify-content:center;gap:10px;}
+.order-btn:active{transform:scale(.98);opacity:.9;}
+.cart-badge{background:rgba(255,255,255,.18);padding:2px 9px;border-radius:999px;font-size:13px;}
+
+/* === PROFILE === */
+.prof-head{padding:18px 18px 0;display:flex;align-items:center;gap:15px;margin-bottom:18px;}
+.prof-av{width:68px;height:68px;border-radius:50%;background:linear-gradient(135deg,var(--accent) 0%,#ff8c60 50%,var(--accent2) 100%);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:26px;font-weight:800;color:white;flex-shrink:0;border:3px solid rgba(255,90,38,.25);}
+.prof-name{font-family:'Syne',sans-serif;font-size:21px;font-weight:800;letter-spacing:-.04em;margin-bottom:3px;}
+.prof-sub{font-size:12px;color:var(--muted);}
+.prof-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:0 18px 16px;}
+.prof-stat{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:15px 10px;text-align:center;}
+.prof-stat-val{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;letter-spacing:-.04em;margin-bottom:3px;}
+.prof-stat-lbl{font-size:10px;color:var(--muted);font-weight:500;}
+.badges-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 18px 16px;}
+.badge-card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:12px 6px;text-align:center;}
+.badge-em{font-size:22px;margin-bottom:4px;}
+.badge-nm{font-size:9px;color:var(--muted);font-weight:500;}
+.disc-card{margin:0 18px 9px;padding:13px;background:linear-gradient(135deg,rgba(29,217,154,.08),rgba(0,207,255,.04));border:1px solid rgba(29,217,154,.2);border-radius:18px;display:flex;align-items:center;gap:12px;cursor:pointer;}
+.disc-icon{width:46px;height:46px;border-radius:13px;background:rgba(29,217,154,.12);border:1px solid rgba(29,217,154,.18);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+.disc-title{font-weight:700;font-size:13px;margin-bottom:2px;}
+.disc-sub{font-size:11px;color:var(--muted);}
+.disc-pct{padding:5px 11px;background:var(--green);border-radius:999px;font-size:13px;font-weight:700;color:#060a12;flex-shrink:0;}
+.myrev{margin:0 18px 9px;padding:13px;background:var(--panel);border:1px solid var(--border);border-radius:18px;cursor:pointer;}
+.myrev-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.myrev-place{font-weight:700;font-size:13px;}
+.myrev-likes{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:4px;}
+.myrev-text{font-size:12px;color:var(--muted);line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+
+/* === STUDIO === */
+.studio-head{padding:16px 18px 12px;}
+.studio-tag{font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--accent2);margin-bottom:5px;}
+.studio-name{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;letter-spacing:-.04em;margin-bottom:2px;}
+.studio-sub{font-size:12px;color:var(--muted);}
+.studio-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:0 18px 14px;}
+.sstat{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:15px;}
+.sstat-lbl{font-size:11px;color:var(--muted);font-weight:500;margin-bottom:7px;}
+.sstat-val{font-family:'Syne',sans-serif;font-size:26px;font-weight:800;letter-spacing:-.04em;margin-bottom:3px;}
+.sstat-chg{font-size:11px;font-weight:600;}
+.up{color:var(--green);}.down{color:var(--red);}
+.insight-row{display:flex;gap:11px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--border);}
+.insight-row:last-child{border-bottom:none;}
+.insight-ic{width:30px;height:30px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;}
+.insight-txt{font-size:12px;color:var(--muted);line-height:1.5;}
+.insight-txt strong{color:var(--text);font-weight:600;}
+.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:12px 18px 20px;}
+.qa{padding:13px;background:var(--panel);border:1px solid var(--border);border-radius:18px;cursor:pointer;}
+.qa:active{opacity:.8;}
+.qa-em{font-size:20px;margin-bottom:7px;}
+.qa-lbl{font-size:12px;font-weight:700;margin-bottom:2px;}
+.qa-sub{font-size:10px;color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="statusbar">
+    <span id="clock">09:41</span>
+    <span style="letter-spacing:.06em">● ● ●</span>
+  </div>
+
+  <div class="content-area">
+
+    <!-- ═══ DISCOVER ═══ -->
+    <div class="view active" id="view-discover">
+      <div class="topbar-d">
+        <div class="logo">Vis<span class="logo-dot">to</span></div>
+        <div class="loc-chip" onclick="switchView('map')">📍 Warszawa, Śródm.</div>
+      </div>
+      <div class="greeting">
+        <h2>Cześć, Tomek 👋</h2>
+        <p>Co dziś sprawdzimy?</p>
+      </div>
+      <div class="search-bar"><span>🔍</span><span>Szukaj restauracji, kawiarni...</span></div>
+      <div class="ai-banner" onclick="openPlace('kuchnia')">
+        <div class="ai-tag"><div class="ai-pulse"></div>AI POLECA DLA CIEBIE</div>
+        <h3>Kuchnia Warszawska — tłoczna teraz 🔥</h3>
+        <p>Prognozujemy krótszą kolejkę po 20:00 — wróć za ~40 min</p>
+        <div class="ai-arrow">→</div>
+      </div>
+      <div class="cat-row">
+        <button class="cat-btn active" onclick="setCat(this)">Wszystkie</button>
+        <button class="cat-btn" onclick="setCat(this)">🍕 Restauracje</button>
+        <button class="cat-btn" onclick="setCat(this)">☕ Kawiarnie</button>
+        <button class="cat-btn" onclick="setCat(this)">🍣 Azjatyckie</button>
+        <button class="cat-btn" onclick="setCat(this)">🍺 Bary</button>
+      </div>
+      <div class="hscroll-wrap">
+        <div class="px sec-head"><div class="sec-title">Teraz w pobliżu</div><div class="sec-more">Więcej →</div></div>
+        <div class="hscroll">
+          <div class="rcard-sm" onclick="openPlace('kuchnia')">
+            <div class="rcard-thumb" style="background:linear-gradient(135deg,#0e1d0e,#1c330d)"><span class="emoji-bg">🥘</span><div class="crowd-chip"><div class="cdot red"></div>TŁOK</div></div>
+            <div class="rcard-body"><div class="rcard-name">Kuchnia Warszawska</div><div class="rcard-sub">Polska · 150 m</div><div class="rcard-chips"><div class="chip-sm">⏱ 52 min</div><div class="chip-sm">⭐ 4.7</div></div></div>
+          </div>
+          <div class="rcard-sm" onclick="openPlace('cafe')">
+            <div class="rcard-thumb" style="background:linear-gradient(135deg,#1a1008,#2d1a08)"><span class="emoji-bg">☕</span><div class="crowd-chip"><div class="cdot green"></div>CICHO</div></div>
+            <div class="rcard-body"><div class="rcard-name">Café Karma</div><div class="rcard-sub">Kawiarnia · 320 m</div><div class="rcard-chips"><div class="chip-sm">⏱ 28 min</div><div class="chip-sm">⭐ 4.9</div></div></div>
+          </div>
+          <div class="rcard-sm" onclick="openPlace('sushi')">
+            <div class="rcard-thumb" style="background:linear-gradient(135deg,#080f18,#0d1a28)"><span class="emoji-bg">🍣</span><div class="crowd-chip"><div class="cdot yellow"></div>UMIAR.</div></div>
+            <div class="rcard-body"><div class="rcard-name">Sushi & Roll</div><div class="rcard-sub">Japońskie · 480 m</div><div class="rcard-chips"><div class="chip-sm">⏱ 41 min</div><div class="chip-sm">⭐ 4.5</div></div></div>
+          </div>
+          <div class="rcard-sm" onclick="openPlace('burger')">
+            <div class="rcard-thumb" style="background:linear-gradient(135deg,#1a0a02,#2e1505)"><span class="emoji-bg">🍔</span><div class="crowd-chip"><div class="cdot red"></div>TŁOK</div></div>
+            <div class="rcard-body"><div class="rcard-name">Burger Masters</div><div class="rcard-sub">Burgery · 600 m</div><div class="rcard-chips"><div class="chip-sm">⏱ 19 min</div><div class="chip-sm">⭐ 4.3</div></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="px">
+        <div class="sec-head"><div class="sec-title">Polecane dziś</div></div>
+        <div class="rlist-item" onclick="openPlace('kuchnia')">
+          <div class="rlist-thumb" style="background:linear-gradient(135deg,#0e1d0e,#1c330d)">🥘</div>
+          <div class="rlist-info"><div class="rlist-name">Kuchnia Warszawska</div><div class="rlist-sub">Polska · 150 m · <span class="cdot red" style="width:6px;height:6px"></span>&nbsp;Tłok</div></div>
+          <div class="rating-tag">⭐ 4.7</div>
+        </div>
+        <div class="rlist-item" onclick="openPlace('cafe')">
+          <div class="rlist-thumb" style="background:linear-gradient(135deg,#1a1008,#2d1a08)">☕</div>
+          <div class="rlist-info"><div class="rlist-name">Café Karma</div><div class="rlist-sub">Kawiarnia · 320 m · <span class="cdot green" style="width:6px;height:6px"></span>&nbsp;Cicho</div></div>
+          <div class="rating-tag">⭐ 4.9</div>
+        </div>
+        <div class="rlist-item" onclick="openPlace('sushi')">
+          <div class="rlist-thumb" style="background:linear-gradient(135deg,#080f18,#0d1a28)">🍣</div>
+          <div class="rlist-info"><div class="rlist-name">Sushi & Roll</div><div class="rlist-sub">Japońskie · 480 m · <span class="cdot yellow" style="width:6px;height:6px"></span>&nbsp;Umiark.</div></div>
+          <div class="rating-tag">⭐ 4.5</div>
+        </div>
+      </div>
+      <div style="height:16px"></div>
+    </div>
+
+    <!-- ═══ MAPA ═══ -->
+    <div class="view" id="view-map">
+      <div class="map-wrap">
+        <div class="map-topbar">
+          <div class="logo" style="font-size:22px">Vis<span class="logo-dot">to</span></div>
+          <div style="font-size:12px;color:var(--muted)">Mapa · Warszawa</div>
+        </div>
+        <div id="map"></div>
+        <div class="map-card-wrap" id="mapCard">
+          <div class="map-mini" id="mapMini" onclick="openPlace('kuchnia')">
+            <div class="map-mini-thumb" id="mapThumb" style="background:linear-gradient(135deg,#0e1d0e,#1c330d)">🥘</div>
+            <div style="flex:1">
+              <div style="font-weight:700;font-size:14px;margin-bottom:3px" id="mapName">Kuchnia Warszawska</div>
+              <div style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:8px">
+                <span id="mapStatus" style="display:flex;align-items:center;gap:4px"><span class="cdot red" style="width:7px;height:7px"></span>Tłok teraz</span>
+                <span id="mapStats">⭐ 4.7 · ~52 min</span>
+              </div>
+            </div>
+            <div style="font-size:20px;color:var(--accent)">→</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ MIEJSCE (dynamic) ═══ -->
+    <div class="view" id="view-place"></div>
+
+    <!-- ═══ PROFIL ═══ -->
+    <div class="view" id="view-profile">
+      <div class="prof-head">
+        <div class="prof-av">T</div>
+        <div><div class="prof-name">Tomek W.</div><div class="prof-sub">@thefalconplr · Visto od marca 2025</div></div>
+      </div>
+      <div class="prof-grid">
+        <div class="prof-stat"><div class="prof-stat-val" style="color:var(--accent)">23</div><div class="prof-stat-lbl">Recenzje</div></div>
+        <div class="prof-stat"><div class="prof-stat-val" style="color:var(--yellow)">184</div><div class="prof-stat-lbl">Polubienia</div></div>
+        <div class="prof-stat"><div class="prof-stat-val" style="color:var(--green)">3</div><div class="prof-stat-lbl">Zniżki</div></div>
+      </div>
+      <div class="px"><div class="sec-head"><div class="sec-title">Odznaki</div></div></div>
+      <div class="badges-grid">
+        <div class="badge-card"><div class="badge-em">🌟</div><div class="badge-nm">Top Recenzent</div></div>
+        <div class="badge-card"><div class="badge-em">📍</div><div class="badge-nm">Eksplorer</div></div>
+        <div class="badge-card"><div class="badge-em">🔥</div><div class="badge-nm">Aktywny</div></div>
+        <div class="badge-card" style="opacity:.3"><div class="badge-em">👑</div><div class="badge-nm">Visto Pro</div></div>
+      </div>
+      <div class="px"><div class="sec-head" style="margin-top:4px"><div class="sec-title">Twoje zniżki</div></div></div>
+      <div class="disc-card">
+        <div class="disc-icon">🎟️</div>
+        <div style="flex:1"><div class="disc-title">Kuchnia Warszawska</div><div class="disc-sub">Recenzja zdobyła 63 polubień!</div></div>
+        <div class="disc-pct">-15%</div>
+      </div>
+      <div class="disc-card">
+        <div class="disc-icon">🎟️</div>
+        <div style="flex:1"><div class="disc-title">Café Karma</div><div class="disc-sub">Popularna recenzja · 52 polubień</div></div>
+        <div class="disc-pct">-10%</div>
+      </div>
+      <div class="px"><div class="sec-head" style="margin-top:8px"><div class="sec-title">Moje recenzje</div></div></div>
+      <div class="myrev" onclick="openPlace('kuchnia')">
+        <div class="myrev-top"><div class="myrev-place">🥘 Kuchnia Warszawska</div><div class="myrev-likes">❤️ 63</div></div>
+        <div style="font-size:11px;margin-bottom:5px">⭐⭐⭐⭐⭐</div>
+        <div class="myrev-text">Absolutnie najlepszy schabowy w Warszawie. Byłem tu może 10 razy i za każdym razem wychodzę zadowolony. Polecam z kapustą zasmażaną!</div>
+      </div>
+      <div class="myrev">
+        <div class="myrev-top"><div class="myrev-place">☕ Café Karma</div><div class="myrev-likes">❤️ 52</div></div>
+        <div style="font-size:11px;margin-bottom:5px">⭐⭐⭐⭐⭐</div>
+        <div class="myrev-text">Najlepsza flat white w okolicy, spokojna atmosfera idealna do pracy. Personel zawsze miły i pamiętają zamówienie.</div>
+      </div>
+      <div style="height:16px"></div>
+    </div>
+
+    <!-- ═══ STUDIO ═══ -->
+    <div class="view" id="view-studio">
+      <div class="studio-head">
+        <div class="studio-tag">VISTO STUDIO — PANEL FIRMY</div>
+        <div class="studio-name">Kuchnia Warszawska</div>
+        <div class="studio-sub">Dane za dziś · aktualizacja co 5 min</div>
+      </div>
+      <div class="studio-grid">
+        <div class="sstat"><div class="sstat-lbl">👤 Odwiedziny</div><div class="sstat-val">124</div><div class="sstat-chg up">↑ +18% vs wczoraj</div></div>
+        <div class="sstat"><div class="sstat-lbl">⏱ Śr. czas wizyty</div><div class="sstat-val">52 min</div><div class="sstat-chg up">↑ +4 min</div></div>
+        <div class="sstat"><div class="sstat-lbl">📦 Zamówienia C&C</div><div class="sstat-val">8</div><div class="sstat-chg down">↓ -2 dziś</div></div>
+        <div class="sstat"><div class="sstat-lbl">⭐ Ocena dziś</div><div class="sstat-val">4.8</div><div class="sstat-chg up">↑ +0.1</div></div>
+      </div>
+      <div class="peak-wrap" style="margin:0 18px 14px">
+        <div class="chart-head">RUCH W CIĄGU DNIA</div>
+        <div class="bars" id="studio-bars"></div>
+      </div>
+      <div class="px"><div class="sec-head"><div class="sec-title">Wnioski AI</div></div></div>
+      <div class="card" style="margin:0 18px 14px;padding:13px">
+        <div class="insight-row"><div class="insight-ic" style="background:rgba(29,217,154,.1)">✅</div><div class="insight-txt"><strong>Obsługa bardzo chwalone</strong> — 91% gości wymieniło obsługę pozytywnie w ostatnich 7 dniach.</div></div>
+        <div class="insight-row"><div class="insight-ic" style="background:rgba(245,184,0,.1)">⚠️</div><div class="insight-txt"><strong>Weekendowe kolejki</strong> — 34% recenzji z soboty wspomina długi czas oczekiwania. Rozważ dodatkowy personel 18–21.</div></div>
+        <div class="insight-row"><div class="insight-ic" style="background:rgba(0,207,255,.1)">💡</div><div class="insight-txt"><strong>Schabowy to Twój bestseller</strong> — pojawia się w 68% pozytywnych recenzji. Promuj go w menu C&C.</div></div>
+      </div>
+      <div class="px"><div class="sec-head"><div class="sec-title">Szybkie akcje</div></div></div>
+      <div class="qa-grid">
+        <div class="qa"><div class="qa-em">💬</div><div class="qa-lbl">Odpowiedz na recenzje</div><div class="qa-sub">3 nowe czekają</div></div>
+        <div class="qa"><div class="qa-em">🍽️</div><div class="qa-lbl">Aktualizuj menu C&C</div><div class="qa-sub">Ostatnia zmiana 2 dni</div></div>
+        <div class="qa"><div class="qa-em">📊</div><div class="qa-lbl">Raport tygodniowy</div><div class="qa-sub">Gotowy do pobrania</div></div>
+        <div class="qa"><div class="qa-em">🎯</div><div class="qa-lbl">Promocja w Visto</div><div class="qa-sub">Dotryj do 12k użytk.</div></div>
+      </div>
+      <div style="height:16px"></div>
+    </div>
+
+  </div><!-- /content-area -->
+
+  <div class="bottom-nav">
+    <div class="nav-item active" onclick="switchView('discover')"><div class="nav-icon">⌂</div><div class="nav-label">Odkryj</div></div>
+    <div class="nav-item" onclick="switchView('map')"><div class="nav-icon">🗺</div><div class="nav-label">Mapa</div></div>
+    <div class="nav-item" onclick="switchView('profile')"><div class="nav-icon">◉</div><div class="nav-label">Profil</div></div>
+    <div class="nav-item" onclick="switchView('studio')"><div class="nav-icon">📊</div><div class="nav-label">Studio</div></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── DATA ─────────────────────────────────────────────────────────────────────
+const DEMO_HOUR = 19;
+const places = {
+  kuchnia:{id:'kuchnia',name:'Kuchnia Warszawska',category:'Polska',distance:'150 m',emoji:'🥘',grad:'linear-gradient(160deg,#0b1a0a,#1b3210)',crowd:{color:'red',label:'Dużo osób teraz',count:'~38 osób',hint:'Wolne stoliki od ~20:00'},avgTime:'52 min',rating:'4.7',revCount:247,
+    hourly:[0,0,0,0,0,0,5,10,20,25,22,35,80,90,70,42,30,55,90,100,85,68,42,14],
+    ai:{aspects:[{label:'🍽️ Jedzenie',pct:94,color:'var(--green)'},{label:'😊 Obsługa',pct:87,color:'var(--green)'},{label:'⏳ Czas czekania',pct:42,color:'var(--yellow)'},{label:'📍 Lokalizacja',pct:91,color:'var(--green)'}],quote:'"Świetne na obiad w tygodniu — weekendy bywają tłoczne ale jedzenie jest tego warte"'},
+    reviews:[{n:'Kamil S.',stars:5,txt:'Absolutnie najlepszy schabowy w Warszawie. Byłem tu może 10 razy i zawsze wychodzę zadowolony. Polecam z kapustą zasmażaną!',likes:63,popular:true},{n:'Aga W.',stars:4,txt:'Bardzo dobre jedzenie, autentyczne smaki. Jedyna wada to kolejka w piątek wieczorem — czekałam ~20 min na stolik.',likes:29,popular:false},{n:'Piotr K.',stars:5,txt:'Najlepszy żurek w Warszawie. Porcje ogromne, ceny uczciwe, obsługa zawsze sympatyczna.',likes:18,popular:false}],
+    menu:[{em:'🥩',name:'Schabowy z ziemniakami',price:'38 zł'},{em:'🍲',name:'Żurek staropolski',price:'22 zł'},{em:'🥗',name:'Surówka kapuściana',price:'12 zł'},{em:'🍺',name:'Piwo Żywiec 0.5l',price:'14 zł'}]},
+  cafe:{id:'cafe',name:'Café Karma',category:'Kawiarnia',distance:'320 m',emoji:'☕',grad:'linear-gradient(160deg,#1a1008,#2d1a08)',crowd:{color:'green',label:'Spokojnie teraz',count:'~7 osób',hint:'Tłoczniej ok. 9–11 rano'},avgTime:'28 min',rating:'4.9',revCount:183,
+    hourly:[0,0,0,0,0,0,5,28,58,72,66,52,60,55,50,57,68,72,50,34,20,10,5,0],
+    ai:{aspects:[{label:'☕ Kawa',pct:98,color:'var(--green)'},{label:'😊 Atmosfera',pct:96,color:'var(--green)'},{label:'💻 WiFi / praca',pct:88,color:'var(--green)'},{label:'💰 Ceny',pct:64,color:'var(--yellow)'}],quote:'"Idealne do pracy z laptopem — cicho, dobra kawa, nikt nie goni. Najlepsza flat white w okolicy"'},
+    reviews:[{n:'Marta B.',stars:5,txt:'Najlepsza flat white w całej okolicy. Chodzę tu prawie codziennie. Personel zawsze miły i pamiętają moje zamówienie.',likes:52,popular:true},{n:'Darek M.',stars:5,txt:'Spokojna atmosfera, dobra muzyka, szybkie WiFi. Idealne na spotkanie biznesowe albo kilka godzin z laptopem.',likes:31,popular:false}],
+    menu:[{em:'☕',name:'Flat White',price:'16 zł'},{em:'🧋',name:'Matcha Latte',price:'18 zł'},{em:'🥐',name:'Croissant maślany',price:'12 zł'},{em:'🍰',name:'Cheesecake',price:'18 zł'}]},
+  sushi:{id:'sushi',name:'Sushi & Roll',category:'Japońskie',distance:'480 m',emoji:'🍣',grad:'linear-gradient(160deg,#080f1a,#0d1b2a)',crowd:{color:'yellow',label:'Umiarkowanie',count:'~22 osoby',hint:'Spokojniej po 21:00'},avgTime:'41 min',rating:'4.5',revCount:134,
+    hourly:[0,0,0,0,0,0,0,0,10,15,15,26,72,82,66,30,26,42,86,96,80,54,24,5],
+    ai:{aspects:[{label:'🍣 Świeżość',pct:92,color:'var(--green)'},{label:'🍚 Ryż i smaki',pct:89,color:'var(--green)'},{label:'⏳ Czas podania',pct:55,color:'var(--yellow)'},{label:'💰 Ceny',pct:58,color:'var(--yellow)'}],quote:'"Solidne sushi, ryby zawsze świeże. Lunch set w tygodniu to najlepsza opcja cenowo"'},
+    reviews:[{n:'Zofia P.',stars:5,txt:'Najświeższe sushi w okolicy, ryby zawsze najwyższej jakości. Łosoś po prostu topi się w ustach.',likes:44,popular:false},{n:'Tomek W.',stars:4,txt:'Świetne jakościowo, choć przy tłumie czas oczekiwania bywa długi. Polecam na spokojny obiad w tygodniu.',likes:21,popular:false}],
+    menu:[{em:'🍱',name:'Zestaw Lunch (10 szt)',price:'42 zł'},{em:'🥢',name:'Łosoś Nigiri (4 szt)',price:'28 zł'},{em:'🌯',name:'California Roll (8 szt)',price:'34 zł'},{em:'🍜',name:'Miso Soup',price:'12 zł'}]},
+  burger:{id:'burger',name:'Burger Masters',category:'Burgery',distance:'600 m',emoji:'🍔',grad:'linear-gradient(160deg,#1a0a02,#2e1504)',crowd:{color:'red',label:'Dużo osób teraz',count:'~45 osób',hint:'Spokojniej od 21:00'},avgTime:'19 min',rating:'4.3',revCount:98,
+    hourly:[0,0,0,0,0,0,0,0,5,10,22,48,92,100,84,50,42,56,92,100,88,64,28,4],
+    ai:{aspects:[{label:'🍔 Burgery',pct:86,color:'var(--green)'},{label:'🍟 Frytki',pct:92,color:'var(--green)'},{label:'⏳ Kolejka',pct:38,color:'var(--red)'},{label:'💰 Ceny',pct:74,color:'var(--green)'}],quote:'"Smaczne burgery w dobrej cenie. Frytki truflowe to legenda. W szczycie możesz czekać 25+ min"'},
+    reviews:[{n:'Ola T.',stars:5,txt:'Najlepsze frytki truflowe w Warszawie. I to wszystko co musisz wiedzieć żeby tu przyjść.',likes:57,popular:true},{n:'Krzysztof N.',stars:4,txt:'Smaczny burger, mięso dobrze wypieczone. Trochę długo czekałem (~25 min) ale warto. Frytki genialne.',likes:33,popular:false}],
+    menu:[{em:'🍔',name:'Burger Classic',price:'32 zł'},{em:'🧀',name:'Cheeseburger Deluxe',price:'38 zł'},{em:'🍟',name:'Frytki truflowe',price:'18 zł'},{em:'🥤',name:'Lemoniada domowa',price:'14 zł'}]}
+};
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let currentMain='discover', mapInited=false, cartTotal=0, cartItems=0;
+
+// ── NAV ───────────────────────────────────────────────────────────────────────
+function switchView(v){
+  document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(e=>e.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  const idx={discover:0,map:1,profile:2,studio:3};
+  if(idx[v]!==undefined){
+    currentMain=v;
+    document.querySelectorAll('.nav-item')[idx[v]].classList.add('active');
+  }
+  if(v==='map'){
+    if(!mapInited){initMap();mapInited=true;}
+    else if(window.mapInst)setTimeout(()=>window.mapInst.invalidateSize(),150);
+  }
+  if(v==='studio')setTimeout(()=>buildChart('studio-bars',places.kuchnia.hourly,DEMO_HOUR),80);
+}
+
+function openPlace(id){
+  const p=places[id]; if(!p)return;
+  document.getElementById('view-place').innerHTML=renderPlace(p);
+  document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(e=>e.classList.remove('active'));
+  const vp=document.getElementById('view-place');
+  vp.classList.add('active'); vp.scrollTop=0;
+  cartTotal=0; cartItems=0;
+  setTimeout(()=>buildChart('place-chart',p.hourly,DEMO_HOUR),100);
+}
+function goBack(){switchView(currentMain);}
+
+// ── RENDER PLACE ──────────────────────────────────────────────────────────────
+function renderPlace(p){
+  const cc=p.crowd.color;
+  const ccVar=cc==='red'?'var(--red)':cc==='green'?'var(--green)':'var(--yellow)';
+  const aspects=p.ai.aspects.map(a=>`
+    <div class="ai-row">
+      <div class="ai-row-label">${a.label}</div>
+      <div class="ai-bar-bg"><div class="ai-bar-fill" style="width:${a.pct}%;background:${a.color}"></div></div>
+      <div class="ai-pct" style="color:${a.color}">${a.pct}%</div>
+    </div>`).join('');
+  const reviews=p.reviews.map((r,i)=>{
+    const st='⭐'.repeat(r.stars)+(r.stars<5?'☆'.repeat(5-r.stars):'');
+    return `<div class="rev-card">
+      <div class="rev-top">
+        <div class="rev-user"><div class="rev-av">${r.n[0]}</div><div><div class="rev-name">${r.n}</div><div class="rev-gps">✓ GPS Zweryfikowano</div></div></div>
+        <div class="rev-stars">${st}</div>
+      </div>
+      <div class="rev-text">${r.txt}</div>
+      <div class="rev-foot">
+        <button class="like-btn" id="lb-${p.id}-${i}" onclick="toggleLike('${p.id}',${i},${r.likes})">♡ ${r.likes}</button>
+        ${r.popular?'<div class="hot-badge">🏆 Popularna (+zniżka)</div>':''}
+      </div>
+    </div>`;
+  }).join('');
+  const menuHtml=p.menu.map(m=>`
+    <div class="menu-row">
+      <div class="menu-icon">${m.em}</div>
+      <div class="menu-info"><div class="menu-name">${m.name}</div><div class="menu-price">${m.price}</div></div>
+      <div class="add-btn" onclick="addItem(this,'${m.price}')">+</div>
+    </div>`).join('');
+  return `
+    <div class="place-hero" style="background:${p.grad}">
+      <div class="place-hero-emoji">${p.emoji}</div>
+      <button class="back-btn" onclick="goBack()">←</button>
+      <div class="place-hero-card">
+        <div class="place-hero-name">${p.name}</div>
+        <div class="place-hero-meta">${p.category} · ${p.distance} · <span style="color:${ccVar}">● ${p.crowd.label.split(' ')[0]}</span></div>
+      </div>
+    </div>
+    <div class="live-strip">
+      <div class="live-left">
+        <div class="live-indicator"><div class="live-ring ${cc}"></div><div class="live-core ${cc}"></div></div>
+        <div class="live-info"><strong>${p.crowd.label}</strong><span>${p.crowd.count} · ${p.crowd.hint}</span></div>
+      </div>
+      <div class="live-right"><strong>${p.avgTime}</strong><span>śr. wizyta</span></div>
+    </div>
+    <div class="pstats">
+      <div class="pstat"><div class="pstat-emoji">⭐</div><div class="pstat-val">${p.rating}</div><div class="pstat-lbl">OCENA</div></div>
+      <div class="pstat"><div class="pstat-emoji">💬</div><div class="pstat-val">${p.revCount}</div><div class="pstat-lbl">RECENZJE</div></div>
+      <div class="pstat"><div class="pstat-emoji">✓</div><div class="pstat-val">${Math.round(p.revCount*.93)}%</div><div class="pstat-lbl">WERYFIK.</div></div>
+    </div>
+    <div class="peak-wrap">
+      <div class="chart-head">POPULARNOŚĆ W CIĄGU DNIA</div>
+      <div class="bars" id="place-chart"></div>
+    </div>
+    <div class="ai-wrap">
+      <div class="ai-head"><div class="ai-pulse blue"></div>ANALIZA VISTO AI</div>
+      <div class="ai-aspects">${aspects}</div>
+      <div class="ai-insight">${p.ai.quote}</div>
+    </div>
+    <div class="px">
+      <div class="sec-head" style="margin-top:4px"><div class="sec-title">Recenzje</div><div class="sec-more">Wszystkie →</div></div>
+      ${reviews}
+    </div>
+    <div class="cc-card">
+      <div class="cc-head"><div class="sec-title">🛍 Zamów i odbierz</div><div style="font-size:11px;color:var(--muted)">~10 min</div></div>
+      ${menuHtml}
+      <button class="order-btn" id="order-btn-${p.id}" onclick="placeOrder('${p.id}')">
+        Zamów i odbierz <span class="cart-badge" id="cart-${p.id}">0 zł</span>
+      </button>
+    </div>
+    <div style="height:16px"></div>`;
+}
+
+// ── INTERACTIONS ──────────────────────────────────────────────────────────────
+const likeState={};
+function toggleLike(pid,idx,base){
+  const key=`${pid}_${idx}`, btn=document.getElementById(`lb-${pid}-${idx}`);
+  if(!btn)return;
+  likeState[key]=!likeState[key];
+  btn.classList.toggle('liked',likeState[key]);
+  btn.textContent=likeState[key]?`❤️ ${base+1}`:`♡ ${base}`;
+}
+function addItem(btn,priceStr){
+  const price=parseInt(priceStr.replace(/[^\d]/g,''))||0;
+  cartTotal+=price; cartItems+=1;
+  btn.textContent='✓'; btn.classList.add('added');
+  const el=document.querySelector('.cart-badge');
+  if(el)el.textContent=cartTotal+' zł';
+}
+function placeOrder(pid){
+  const btn=document.getElementById('order-btn-'+pid); if(!btn)return;
+  if(cartItems===0){
+    btn.textContent='Najpierw dodaj coś do koszyka!';
+    btn.style.background='rgba(255,90,38,.6)';
+    setTimeout(()=>{btn.style.background='var(--accent)';btn.innerHTML=`Zamów i odbierz <span class="cart-badge" id="cart-${pid}">0 zł</span>`;},1800);
+    return;
+  }
+  btn.style.background='var(--green)'; btn.style.color='#060a12';
+  btn.textContent=`✓ Zamówienie złożone! · ${cartTotal} zł`;
+  cartItems=0; cartTotal=0;
+}
+function setCat(btn){
+  document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ── CHART ─────────────────────────────────────────────────────────────────────
+function buildChart(cid,hourly,curH){
+  const el=document.getElementById(cid); if(!el)return;
+  el.innerHTML='';
+  hourly.forEach((v,h)=>{
+    const col=document.createElement('div');
+    col.className='bcol'+(h===curH?' current':'');
+    const bar=document.createElement('div');
+    const cls=v>65?'high':v>30?'mid':'low';
+    bar.className=`bbar ${cls}${h===curH?' now':''}`;
+    bar.style.height=(v*.58)+'px';
+    const lbl=document.createElement('div');
+    lbl.className='blbl';
+    lbl.textContent=h%6===0?h+'h':(h===curH?'↑':'');
+    col.appendChild(bar); col.appendChild(lbl); el.appendChild(col);
+  });
+}
+
+// ── MAP ───────────────────────────────────────────────────────────────────────
+function initMap(){
+  const map=L.map('map',{zoomControl:false,attributionControl:false}).setView([52.2297,21.0122],15);
+  window.mapInst=map;
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
+  const pins=[
+    {ll:[52.2297,21.0122],id:'kuchnia',color:'#ff3957',em:'🥘',name:'Kuchnia Warszawska',status:'Tłok teraz',rating:'4.7',time:'~52 min',grad:'linear-gradient(135deg,#0e1d0e,#1c330d)'},
+    {ll:[52.2316,21.0162],id:'cafe',color:'#1dd99a',em:'☕',name:'Café Karma',status:'Cicho teraz',rating:'4.9',time:'~28 min',grad:'linear-gradient(135deg,#1a1008,#2d1a08)'},
+    {ll:[52.2278,21.0188],id:'sushi',color:'#f5b800',em:'🍣',name:'Sushi & Roll',status:'Umiarkowanie',rating:'4.5',time:'~41 min',grad:'linear-gradient(135deg,#080f18,#0d1a28)'},
+    {ll:[52.2262,21.0095],id:'burger',color:'#ff3957',em:'🍔',name:'Burger Masters',status:'Tłok teraz',rating:'4.3',time:'~19 min',grad:'linear-gradient(135deg,#1a0a02,#2e1504)'}
+  ];
+  const card=document.getElementById('mapCard');
+  pins.forEach(pin=>{
+    const icon=L.divIcon({html:`<div style="width:38px;height:38px;border-radius:50%;background:${pin.color};border:3px solid rgba(255,255,255,.9);box-shadow:0 4px 18px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;">${pin.em}</div>`,iconSize:[38,38],iconAnchor:[19,19],className:''});
+    L.marker(pin.ll,{icon}).addTo(map).on('click',()=>{
+      document.getElementById('mapName').textContent=pin.name;
+      document.getElementById('mapStats').textContent=`⭐ ${pin.rating} · ${pin.time}`;
+      document.getElementById('mapThumb').style.background=pin.grad;
+      document.getElementById('mapThumb').textContent=pin.em;
+      document.getElementById('mapMini').onclick=()=>openPlace(pin.id);
+      card.classList.add('visible');
+    });
+  });
+  map.on('click',()=>card.classList.remove('visible'));
+  setTimeout(()=>map.invalidateSize(),200);
+}
+
+// ── CLOCK ─────────────────────────────────────────────────────────────────────
+(function tick(){
+  const n=new Date(), el=document.getElementById('clock');
+  if(el)el.textContent=String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');
+  setTimeout(tick,10000);
+})();
+</script>
+</body>
+</html>
